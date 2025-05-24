@@ -71,6 +71,7 @@
       position: relative;
       perspective: 600px;
       border: 6px solid #76d275;
+      touch-action: none; /* important for touch dragging */
     }
 
     .digit-strip {
@@ -203,30 +204,31 @@
 
   <script>
     let count = 0;
-    const strip0 = document.getElementById('strip0');
-    const strip1 = document.getElementById('strip1');
+    const strips = [document.getElementById('strip0'), document.getElementById('strip1')];
+    const digitHeight = strips[0].children.length ? strips[0].children[0].offsetHeight : 300;
 
+    // Create digits for each strip
     function createDigitStrip(strip) {
-      strip.innerHTML = '';
-      for (let i = 0; i < 10; i++) {
-        const div = document.createElement('div');
-        div.className = 'digit';
-        div.textContent = i;
-        strip.appendChild(div);
-      }
-    }
+  strip.innerHTML = '';
+  for (let i = 0; i < 20; i++) { // duplicate digits 0-9 twice
+    const div = document.createElement('div');
+    div.className = 'digit';
+    div.textContent = i % 10;
+    strip.appendChild(div);
+  }
+}
 
-    createDigitStrip(strip0);
-    createDigitStrip(strip1);
+    strips.forEach(createDigitStrip);
 
     function spinTo(strip, digit) {
-      strip.style.transform = `translateY(-${digit * strip.children[0].offsetHeight}px)`;
+      strip.style.transition = 'transform 0.8s cubic-bezier(0.22, 1, 0.36, 1)';
+      strip.style.transform = `translateY(-${digit * digitHeight}px)`;
     }
 
     function updateDisplay() {
       const [d0, d1] = String(count).padStart(2, '0').split('').map(Number);
-      spinTo(strip0, d0);
-      spinTo(strip1, d1);
+      spinTo(strips[0], d0);
+      spinTo(strips[1], d1);
     }
 
     function changeCounter(delta) {
@@ -238,6 +240,74 @@
       count = 0;
       updateDisplay();
     }
+
+    // --- Touch & Drag Support for strips ---
+    strips.forEach((strip, index) => {
+      let startY = null;
+      let currentDigit = 0;
+
+      function clampDigit(d) {
+        return (d + 10) % 10;
+      }
+
+      // On drag start
+      function onDragStart(e) {
+        e.preventDefault();
+        startY = e.touches ? e.touches[0].clientY : e.clientY;
+        currentDigit = parseInt(strip.style.transform.replace(/[^0-9]/g, '')) / digitHeight || 0;
+        strip.style.transition = 'none';
+      }
+
+      // On drag move
+      function onDragMove(e) {
+        if (startY === null) return;
+        const y = e.touches ? e.touches[0].clientY : e.clientY;
+        const deltaY = y - startY;
+
+        // Calculate new translateY based on drag distance
+        let newTranslate = -currentDigit * digitHeight + deltaY;
+        // Clamp translate between 0 and -9 * digitHeight
+        if (newTranslate > 0) newTranslate = 0;
+        if (newTranslate < -9 * digitHeight) newTranslate = -9 * digitHeight;
+
+        strip.style.transform = `translateY(${newTranslate}px)`;
+      }
+
+      // On drag end
+      function onDragEnd(e) {
+        if (startY === null) return;
+        const y = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+        const deltaY = y - startY;
+        let digitChange = 0;
+
+        if (Math.abs(deltaY) > digitHeight / 2) {
+          digitChange = deltaY > 0 ? -1 : 1;
+        }
+
+        // Calculate new digit based on drag
+        const [d0, d1] = String(count).padStart(2, '0').split('').map(Number);
+        let newDigit = index === 0 ? d0 : d1;
+        newDigit = clampDigit(newDigit + digitChange);
+
+        // Update global count accordingly
+        if (index === 0) {
+          count = (newDigit * 10 + (count % 10)) % 100;
+        } else {
+          count = (Math.floor(count / 10) * 10 + newDigit) % 100;
+        }
+
+        updateDisplay();
+        startY = null;
+      }
+
+      strip.addEventListener('touchstart', onDragStart);
+      strip.addEventListener('touchmove', onDragMove);
+      strip.addEventListener('touchend', onDragEnd);
+
+      strip.addEventListener('mousedown', onDragStart);
+      window.addEventListener('mousemove', onDragMove);
+      window.addEventListener('mouseup', onDragEnd);
+    });
 
     updateDisplay();
   </script>
