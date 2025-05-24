@@ -71,7 +71,7 @@
       position: relative;
       perspective: 600px;
       border: 6px solid #76d275;
-      touch-action: none; /* important for touch dragging */
+      touch-action: none; /* disable default touch scroll */
     }
 
     .digit-strip {
@@ -205,24 +205,35 @@
   <script>
     let count = 0;
     const strips = [document.getElementById('strip0'), document.getElementById('strip1')];
-    const digitHeight = strips[0].children.length ? strips[0].children[0].offsetHeight : 300;
+    let digitHeight = 300; // default, will update after DOM ready
 
-    // Create digits for each strip
     function createDigitStrip(strip) {
-  strip.innerHTML = '';
-  for (let i = 0; i < 20; i++) { // duplicate digits 0-9 twice
-    const div = document.createElement('div');
-    div.className = 'digit';
-    div.textContent = i % 10;
-    strip.appendChild(div);
-  }
-}
+      strip.innerHTML = '';
+      for (let i = 0; i < 20; i++) { // duplicate digits 0-9 twice for smooth wrap
+        const div = document.createElement('div');
+        div.className = 'digit';
+        div.textContent = i % 10;
+        strip.appendChild(div);
+      }
+    }
 
     strips.forEach(createDigitStrip);
 
+    // After digits created, measure digit height dynamically
+    window.requestAnimationFrame(() => {
+      digitHeight = strips[0].children[0].offsetHeight;
+      // Initialize strips position at second set (index 10)
+      strips.forEach(strip => {
+        strip.style.transform = `translateY(${-digitHeight * 10}px)`;
+      });
+      updateDisplay();
+    });
+
     function spinTo(strip, digit) {
+      // Show digit in the second set to allow wrap drag above and below
+      const pos = -digitHeight * (digit + 10);
       strip.style.transition = 'transform 0.8s cubic-bezier(0.22, 1, 0.36, 1)';
-      strip.style.transform = `translateY(-${digit * digitHeight}px)`;
+      strip.style.transform = `translateY(${pos}px)`;
     }
 
     function updateDisplay() {
@@ -241,67 +252,72 @@
       updateDisplay();
     }
 
+    // Helper mod function for wrapping digits 0-9
+    function mod(n, m) {
+      return ((n % m) + m) % m;
+    }
+
     // --- Touch & Drag Support for strips ---
     strips.forEach((strip, index) => {
       let startY = null;
-      let currentDigit = 0;
+      let startTranslateY = 0;
+      let currentTranslateY = 0;
 
-      function clampDigit(d) {
-        return (d + 10) % 10;
+      // Initialize currentTranslateY at index 10 (digit 0)
+      currentTranslateY = -digitHeight * 10;
+      strip.style.transform = `translateY(${currentTranslateY}px)`;
+
+      function snapToDigit(y) {
+        return Math.round(y / digitHeight) * digitHeight;
       }
 
-      // On drag start
       function onDragStart(e) {
         e.preventDefault();
         startY = e.touches ? e.touches[0].clientY : e.clientY;
-        currentDigit = parseInt(strip.style.transform.replace(/[^0-9]/g, '')) / digitHeight || 0;
+        const style = strip.style.transform;
+        const match = style.match(/translateY\((-?\d+)px\)/);
+        currentTranslateY = match ? parseInt(match[1]) : 0;
+        startTranslateY = currentTranslateY;
         strip.style.transition = 'none';
       }
 
-      // On drag move
       function onDragMove(e) {
         if (startY === null) return;
         const y = e.touches ? e.touches[0].clientY : e.clientY;
         const deltaY = y - startY;
 
-        // Calculate new translateY based on drag distance
-        let newTranslate = -currentDigit * digitHeight + deltaY;
-        // Clamp translate between 0 and -9 * digitHeight
+        let newTranslate = startTranslateY + deltaY;
+
+        // Clamp translateY between 0 (top of first digit) and -digitHeight*19 (bottom of last digit)
         if (newTranslate > 0) newTranslate = 0;
-        if (newTranslate < -9 * digitHeight) newTranslate = -9 * digitHeight;
+        if (newTranslate < -digitHeight * 19) newTranslate = -digitHeight * 19;
 
         strip.style.transform = `translateY(${newTranslate}px)`;
+        currentTranslateY = newTranslate;
       }
 
-      // On drag end
       function onDragEnd(e) {
         if (startY === null) return;
-        const y = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
-        const deltaY = y - startY;
-        let digitChange = 0;
+        strip.style.transition = 'transform 0.8s cubic-bezier(0.22, 1, 0.36, 1)';
 
-        if (Math.abs(deltaY) > digitHeight / 2) {
-          digitChange = deltaY > 0 ? -1 : 1;
-        }
+        let snapped = snapToDigit(currentTranslateY);
+        let digitIndex = -snapped / digitHeight;
+        let digit = mod(digitIndex, 10); // wrap digit index to 0-9
 
-        // Calculate new digit based on drag
+        // Update global count based on dragged digit for this strip
         const [d0, d1] = String(count).padStart(2, '0').split('').map(Number);
-        let newDigit = index === 0 ? d0 : d1;
-        newDigit = clampDigit(newDigit + digitChange);
-
-        // Update global count accordingly
         if (index === 0) {
-          count = (newDigit * 10 + (count % 10)) % 100;
+          count = (digit * 10 + d1) % 100;
         } else {
-          count = (Math.floor(count / 10) * 10 + newDigit) % 100;
+          count = (d0 * 10 + digit) % 100;
         }
-
         updateDisplay();
+
         startY = null;
       }
 
-      strip.addEventListener('touchstart', onDragStart);
-      strip.addEventListener('touchmove', onDragMove);
+      strip.addEventListener('touchstart', onDragStart, { passive: false });
+      strip.addEventListener('touchmove', onDragMove, { passive: false });
       strip.addEventListener('touchend', onDragEnd);
 
       strip.addEventListener('mousedown', onDragStart);
@@ -309,7 +325,6 @@
       window.addEventListener('mouseup', onDragEnd);
     });
 
-    updateDisplay();
   </script>
 </body>
 </html>
