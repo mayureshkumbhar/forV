@@ -83,16 +83,20 @@
     }
 
     .digit {
-      height: 300px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12rem;
-      font-weight: bold;
-      color: var(--text-color);
-      text-shadow: 3px 3px 10px #2a6e2a;
-      user-select: none;
-    }
+  height: 100%;
+  line-height: 300px; /* same as .slot height */
+  font-size: 12rem;
+  font-weight: bold;
+  color: var(--text-color);
+  text-shadow: 3px 3px 10px #2a6e2a;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+}
+
 
     .buttons {
       display: flex;
